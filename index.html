@@ -1168,7 +1168,7 @@
     if (!N) return;
 
     const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const DRIFT = reduceMotion ? 0 : 0.0024;   // idle spin speed (rad/frame)
+    const DRIFT = reduceMotion ? 0 : 0.0035;   // idle spin speed (rad/frame)
     const STEP  = (Math.PI * 2) / N;           // one card
 
     let rx = 330, ry = 74;        // ellipse radii
