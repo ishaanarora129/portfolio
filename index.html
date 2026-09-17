@@ -819,11 +819,29 @@
       #quote { padding: 56px 0; }
       .quote-mark { font-size: 56px; }
 
-      /* Work — orbit stays, just tighter */
-      .orbit-stage::before, .orbit-stage::after { width: 28px; }
+      /* Work — phone responsive */
+      .orbit-stage {
+        --cw: 150px;
+        --ch: 267px;
+        min-height: 390px;
+      }
+      .orbit-stage::before, .orbit-stage::after { width: 20px; }
       .orbit-title { font-size: 14px; }
       .orbit-footer { gap: 12px; margin-top: 16px; }
       .orbit-hint { font-size: 8px; letter-spacing: 0.16em; }
+      .orbit-nav { width: 32px; height: 32px; }
+
+      /* Reel modal — fit safely inside small phone screens */
+      .reel-modal {
+        padding: 52px 12px 42px;
+      }
+      .reel-modal-inner {
+        width: min(390px, 92vw);
+        max-height: calc(100svh - 94px);
+      }
+      .reel-frame {
+        max-height: calc(100svh - 94px);
+      }
 
       /* Services */
       .services-grid { grid-template-columns: 1fr !important; gap: 14px; }
@@ -1310,7 +1328,9 @@
     reelMetaCat.textContent   = cat   || '';
     reelMetaTitle.textContent = title || '';
 
-    reelIframe.src = 'https://www.instagram.com/reel/' + id + '/embed/?autoplay=1';
+    // No autoplay param — Instagram's own player shows a play button
+    // if it decides not to autoplay, which is the reliable behaviour.
+    reelIframe.src = 'https://www.instagram.com/reel/' + id + '/embed/';
 
     reelLastFocus = document.activeElement;
     reelModal.classList.add('open');
@@ -1351,7 +1371,7 @@
   });
 
   /* ══════════════════════════
-     WORK — 3D ORBIT CAROUSEL
+     WORK — 3D ORBIT CAROUSEL + REEL TAP HANDLING
   ══════════════════════════ */
   (function () {
     const stage = document.getElementById('orbitStage');
@@ -1362,14 +1382,15 @@
     if (!N) return;
 
     const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const DRIFT = reduceMotion ? 0 : 0.0035;   // idle spin speed (rad/frame)
+    const DRIFT = reduceMotion ? 0 : 0.0035;   // idle spin speed (rad/frame) — unchanged
     const STEP  = (Math.PI * 2) / N;           // one card
 
     let rx = 330, ry = 74;        // ellipse radii
     let rot = 0, vel = 0;         // rotation + momentum
     let target = null;            // set by arrow buttons
     let dragging = false, paused = false;
-    let lastX = 0, movedX = 0;
+    let lastX = 0, dragDistance = 0;
+    let activeCard = null;        // which card (if any) the pointer went down on
 
     /* Size the stage + cards from the available width */
     function measure() {
@@ -1426,43 +1447,55 @@
       layout();
     }
 
-    /* Drag */
+    /* Drag the carousel with the pointer.
+       A click/tap is handled separately by the card itself. */
     function onDown(e) {
       dragging = true; vel = 0; target = null;
-      lastX = e.clientX; movedX = 0;
-      if (e.pointerId !== undefined && stage.setPointerCapture) {
-        try { stage.setPointerCapture(e.pointerId); } catch (err) {}
-      }
+      lastX = e.clientX;
+      dragDistance = 0;
     }
+
     function onMove(e) {
       if (!dragging) return;
       const dx = e.clientX - lastX;
       lastX = e.clientX;
-      movedX += Math.abs(dx);
+      dragDistance += Math.abs(dx);
       const dRot = dx * 0.0045;
       rot += dRot;
-      vel = dRot;                    // release velocity = last frame's spin
+      vel = dRot;
     }
-    function onUp() { dragging = false; }
+
+    function onUp() {
+      dragging = false;
+    }
 
     stage.addEventListener('pointerdown', onDown);
     window.addEventListener('pointermove', onMove);
     window.addEventListener('pointerup', onUp);
     window.addEventListener('pointercancel', onUp);
 
-    /* Click a card → open the reel in the modal.
-       A drag (moved more than 6px) must never open anything. */
+    function openReelFromCard(card) {
+      const cat = card.querySelector('.orbit-cat');
+      const title = card.querySelector('.orbit-title');
+      openReel(
+        card.getAttribute('href'),
+        cat ? cat.textContent.trim() : '',
+        title ? title.textContent.trim() : ''
+      );
+    }
+
+    /* Normal click/tap opens the Reel modal.
+       A dragged card is ignored so dragging never opens a Reel. */
     cards.forEach(card => {
       card.addEventListener('click', e => {
-        e.preventDefault();               // never follow the Instagram link
-        if (movedX > 6) return;           // that was a drag, not a tap
-        const cat   = card.querySelector('.orbit-cat');
-        const title = card.querySelector('.orbit-title');
-        openReel(
-          card.getAttribute('href'),
-          cat ? cat.textContent.trim() : '',
-          title ? title.textContent.trim() : ''
-        );
+        e.preventDefault();
+        e.stopPropagation();
+        if (dragDistance > 6) {
+          dragDistance = 0;
+          return;
+        }
+        openReelFromCard(card);
+        dragDistance = 0;
       });
     });
 
@@ -1476,7 +1509,7 @@
     if (prevBtn) prevBtn.addEventListener('click', () => { vel = 0; target = (target === null ? rot : target) + STEP; });
     if (nextBtn) nextBtn.addEventListener('click', () => { vel = 0; target = (target === null ? rot : target) - STEP; });
 
-    /* Keyboard */
+    /* Keyboard — arrow-key navigation for the carousel itself */
     stage.addEventListener('keydown', e => {
       if (e.key === 'ArrowLeft')  { vel = 0; target = (target === null ? rot : target) + STEP; }
       if (e.key === 'ArrowRight') { vel = 0; target = (target === null ? rot : target) - STEP; }
